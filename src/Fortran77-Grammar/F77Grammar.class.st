@@ -8,7 +8,8 @@ Fixed-form layout is handled inside the grammar:
 - columns 1-5: label field; column 6: blank or 0 on an initial line;
 - continuation lines (blank cols 1-5, col 6 not blank nor 0, possibly preceded by comment/blank lines) are part of #sep, the trimmer used around every token;
 - lines may be longer than 72 columns: every character is significant (no column 73+ truncation);
-- character constants may be continued on a continuation line.
+- character constants may be continued on a continuation line;
+- C preprocessor lines (#include ""f"" or <f>, #ifdef, #ifndef, #if, #elif, #else, #endif) are treated like comment lines: they may appear anywhere, even between continuation lines, and their balance is not checked.
 
 Simplifications:
 - blanks separate tokens (DO10I=1,10 is not accepted), but two-word keywords are accepted with or without blank (GO TO, END IF, ELSE IF, DOUBLE PRECISION, BLOCK DATA, END FILE);
@@ -156,7 +157,12 @@ Class {
 		'endDoStatement',
 		'exitStatement',
 		'cycleStatement',
-		'includeFile'
+		'includeFile',
+		'preprocessorLine',
+		'includeDirective',
+		'conditionalDirective',
+		'macroName',
+		'directiveText'
 	],
 	#category : 'Fortran77-Grammar',
 	#package : 'Fortran77-Grammar'
@@ -351,6 +357,14 @@ F77Grammar >> concatExpression [
 ]
 
 { #category : 'productions' }
+F77Grammar >> conditionalDirective [
+	^ (((self directive: 'ifdef') / (self directive: 'ifndef')) , macroName)
+		/ (((self directive: 'if') / (self directive: 'elif')) , directiveText)
+		/ (((self directive: 'else') / (self directive: 'endif')) , directiveText optional)
+
+]
+
+{ #category : 'productions' }
 F77Grammar >> continuation [
 	"end of the current line, then a continuation line up to and including column 6,
 	or a tab-format continuation line: TAB then a digit 1-9"
@@ -453,6 +467,20 @@ F77Grammar >> dimensionDeclarator [
 { #category : 'productions' }
 F77Grammar >> dimensionStatement [
 	^ (self kw: 'DIMENSION') , (self listOf: name , arrayDeclarator)
+
+]
+
+{ #category : 'private' }
+F77Grammar >> directive: aString [
+	"#name, blanks allowed before and after #"
+	^ self ppTok: $# asPParser , blank star , aString asPParser caseInsensitive , nameChar not
+
+]
+
+{ #category : 'productions' }
+F77Grammar >> directiveText [
+	"rest of the line, not analysed (#if condition, comment after #endif)"
+	^ self ppTok: eol negate plus
 
 ]
 
@@ -715,6 +743,14 @@ F77Grammar >> implicitStatement [
 ]
 
 { #category : 'productions' }
+F77Grammar >> includeDirective [
+	^ (self directive: 'include')
+		, (self ppTok: ($" asPParser , ($" asPParser / eol) negate plus , $" asPParser)
+			/ ($< asPParser , ($> asPParser / eol) negate plus , $> asPParser))
+
+]
+
+{ #category : 'productions' }
 F77Grammar >> includeFile [
 	"Alternative start rule for a fragment meant to be included: the body of a program unit, without header nor END.
 	Use: (F77Grammar newStartingAt: #includeFile) parse: aString"
@@ -851,6 +887,12 @@ F77Grammar >> lparen [
 ]
 
 { #category : 'productions' }
+F77Grammar >> macroName [
+	^ self ppTok: (#letter asPParser / $_ asPParser) , (#word asPParser / $_ asPParser) star , nameChar not
+
+]
+
+{ #category : 'productions' }
 F77Grammar >> minus [
 	^ self tok: $- asPParser
 
@@ -870,7 +912,7 @@ F77Grammar >> nameChar [
 
 { #category : 'productions' }
 F77Grammar >> nonCodeLine [
-	^ commentLine / blankLine
+	^ commentLine / blankLine / preprocessorLine
 
 ]
 
@@ -907,6 +949,21 @@ F77Grammar >> plus [
 { #category : 'productions' }
 F77Grammar >> power [
 	^ self tok: '**' asPParser
+
+]
+
+{ #category : 'private' }
+F77Grammar >> ppTok: aParser [
+	"token of a preprocessor line: only blanks around it, so that a directive never swallows the next line as a continuation"
+	^ aParser token trim: blank star
+
+]
+
+{ #category : 'productions' }
+F77Grammar >> preprocessorLine [
+	"C preprocessor directive lines. They are treated like comment lines (they may appear anywhere,
+	even between an initial line and its continuation): #if/#endif balance is not checked"
+	^ (includeDirective / conditionalDirective) , endOfStatement
 
 ]
 

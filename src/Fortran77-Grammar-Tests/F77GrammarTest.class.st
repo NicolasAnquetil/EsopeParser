@@ -658,6 +658,91 @@ F77GrammarTest >> testParameterStatement [
 
 ]
 
+{ #category : 'tests-preprocessor' }
+F77GrammarTest >> testPreprocessorBetweenContinuationLines [
+	"like comment lines, directives between continuation lines are part of the separator: they produce no token"
+	| source tokens |
+	source := self lines: #(
+		'      X = A'
+		'#ifdef WITH_B'
+		'     &    + B'
+		'#endif'
+		'     &    + C'
+		'      END').
+	tokens := self tokensIn: (self parse: source rule: #start).
+	self assert: (tokens collect: [ :t | t value ]) asArray equals: #('X' '=' 'A' '+' 'B' '+' 'C' 'END').
+	self assert: (tokens at: 5) start equals: (source indexOfSubCollection: '+ B') + 2
+
+]
+
+{ #category : 'tests-preprocessor' }
+F77GrammarTest >> testPreprocessorBranchesAreAllParsed [
+	"directives are transparent: all branches are seen, so branches that open constructs differently are rejected"
+	self fail: (self lines: #(
+		'#ifdef A'
+		'      IF (X) THEN'
+		'#else'
+		'      IF (Y) THEN'
+		'#endif'
+		'         Z = 1'
+		'      END IF'
+		'      END')) rule: #start
+
+]
+
+{ #category : 'tests-preprocessor' }
+F77GrammarTest >> testPreprocessorDirectiveTokenPositions [
+	| source tokens |
+	source := self lines: #('#ifdef  DEBUG' '      END').
+	tokens := self tokensIn: (self parse: source rule: #start).
+	self assert: (tokens collect: [ :t | t start -> t stop ]) asArray
+		equals: { 1 -> 6. 9 -> 13. 21 -> 23 }
+
+]
+
+{ #category : 'tests-preprocessor' }
+F77GrammarTest >> testPreprocessorDirectives [
+	#('#include "f.inc"' '#include <sys/f.h>' '  #  include "x.inc"' '#INCLUDE "X.INC"'
+	  '#ifdef DEBUG' '#ifndef _F_H' '#if defined(A) && B > 1' '#elif X' '#else' '#endif' '#endif /* DEBUG */' '#endif   ') do: [ :each |
+		self parse: each rule: #preprocessorLine ].
+	#('#include' '#include f.inc' '#include "f.inc' '#ifdef' '#ifdef 1A' '#ifdef A B' '#if' '#elif'
+	  '#define X 1' '#foo' '#includex "f"' '#endifx' 'include "f.inc"') do: [ :each |
+		self reject: each rule: #preprocessorLine ]
+
+]
+
+{ #category : 'tests-preprocessor' }
+F77GrammarTest >> testPreprocessorInIncludeFile [
+	self parse: (self lines: #(
+		'#ifndef PARAMS_INC'
+		'      INTEGER NMAX'
+		'      PARAMETER (NMAX = 100)'
+		'#endif')) rule: #includeFile
+
+]
+
+{ #category : 'tests-preprocessor' }
+F77GrammarTest >> testPreprocessorInProgram [
+	self parse: (self lines: #(
+		'#include "params.inc"'
+		'      PROGRAM P'
+		'#ifdef DEBUG'
+		'      PRINT *, ''debug'''
+		'#else'
+		'      CONTINUE'
+		'#endif'
+		'#if defined(A) && !defined(B)'
+		'      IF (X) THEN'
+		'         X = 1'
+		'      END IF'
+		'#elif C'
+		'      Y = 2'
+		'#endif'
+		'      END'
+		'#endif /* trailing directive */')) rule: #start
+
+]
+
 { #category : 'tests-units' }
 F77GrammarTest >> testProgramStatement [
 	self parse: 'PROGRAM MAIN' rule: #programStatement.

@@ -11,7 +11,7 @@ I extend F77Grammar with the ESOPE extensions (acceptor only, tokens keep their 
   (also allowed as the statement of a logical IF)
 - component access through a pointer: P.ATTR, P.ATTR(I), P.CSTG(I:J), P.ATTR(/1) (dimension query)
   A dot followed by a dot-operator name (P.EQ.Q) is still an operator.
-- include directives on their own line: #include ""f.inc"", #include <f.inc>, -INC NAME, %INC NAME
+- include directives on their own line: -INC NAME, %INC NAME (#include is handled by F77Grammar)
 
 Common FORTRAN extensions found in ESOPE code (DO ... ENDDO, tab-format lines) are handled by F77Grammar.
 "
@@ -76,11 +76,9 @@ F77EsopeGrammar >> endSegmentStatement [
 
 { #category : 'productions' }
 F77EsopeGrammar >> includeDirectiveLine [
-	^ (((self tok: '#include' asPParser caseInsensitive)
-			, (self tok: ($" asPParser , ($" asPParser / eol) negate plus , $" asPParser)
-				/ ($< asPParser , ($> asPParser / eol) negate plus , $> asPParser)))
-		/ ((self tok: (PP2PredicateObjectNode anyOf: '-%') , 'INC' asPParser caseInsensitive)
-			, (self tok: (blank / eol) negate plus)))
+	"ESOPE include lines: -INC NAME or %INC NAME (#include is handled by F77Grammar>>preprocessorLine)"
+	^ (self ppTok: (PP2PredicateObjectNode anyOf: '-%') , 'INC' asPParser caseInsensitive , nameChar not)
+		, (self ppTok: (blank / eol) negate plus)
 		, endOfStatement
 
 ]
