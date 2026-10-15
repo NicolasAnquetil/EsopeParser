@@ -162,7 +162,8 @@ Class {
 		'includeDirective',
 		'conditionalDirective',
 		'macroName',
-		'directiveText'
+		'directiveText',
+		'statementLine'
 	],
 	#category : 'Fortran77-Grammar',
 	#package : 'Fortran77-Grammar'
@@ -269,7 +270,7 @@ F77Grammar >> blockIfStatement [
 
 { #category : 'productions' }
 F77Grammar >> bodyLine [
-	^ nonCodeLine / ifConstruct / doConstruct / (self line: statement)
+	^ nonCodeLine / ifConstruct / doConstruct / statementLine
 
 ]
 
@@ -1114,6 +1115,12 @@ F77Grammar >> statement [
 		/ (self stmt: doStatement)
 		/ (self stmt: logicalIfStatement)
 		/ actionStatement
+
+]
+
+{ #category : 'productions' }
+F77Grammar >> statementLine [
+	^ self line: statement
 
 ]
 
