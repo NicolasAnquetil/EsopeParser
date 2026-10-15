@@ -10,6 +10,26 @@ Steps (#importSteps): parse the source files (#extensions) to IAST, parse the fi
 
 	F77Importer onSourceString: aString.	""as FamixFortranImporter class>>onSourceString:""
 	F77Importer onFile: aPathString.
+
+## Managing import errors
+
+Import errors are recorded by the importer's errorHandler (a FortranErrorManager), with the context (step, file) where they happened:
+
+	importer errorHandler.
+	importer errors.	""context -> exception""
+	importer hasErrors.
+
+Another error manager can be given (e.g. to share it with other importers):
+
+	importer errorHandler: FortranErrorManager new.
+
+Additional checking is run on the final model (true by default):
+
+	importer withSanityChecks: true.
+
+For debugging, the importer can stop at the first error:
+
+	importer stopOnError: true.
 "
 Class {
 	#name : 'F77Importer',
@@ -53,10 +73,14 @@ F77Importer class >> onSourceString: aSourceString [
 
 ]
 
-{ #category : 'error' }
+{ #category : 'accessing' }
 F77Importer >> errorHandler [
-	^ errorHandler
+	^ errorHandler ifNil: [ errorHandler := FortranErrorManager new ]
+]
 
+{ #category : 'accessing' }
+F77Importer >> errorHandler: aFortranErrorManager [
+	errorHandler := aFortranErrorManager
 ]
 
 { #category : 'error' }
@@ -68,6 +92,12 @@ F77Importer >> errors [
 { #category : 'accessing' }
 F77Importer >> famixModel [
 	^ famixModel
+
+]
+
+{ #category : 'accessing' }
+F77Importer >> famixModel: aModel [
+	famixModel := aModel
 
 ]
 
@@ -113,6 +143,13 @@ F77Importer >> iastModel [
 	"the IASTProgramFile of each file imported"
 
 	^ iastModel
+
+]
+
+{ #category : 'accessing' }
+F77Importer >> iastModel: aModel [
+
+	iastModel := aModel
 
 ]
 
@@ -224,12 +261,9 @@ F77Importer >> parse: aFileReference startingAt: aSymbol [
 		do: [ :error | errorHandler error: error. nil ].
 	(result isKindOf: IASTProgramFile)
 		ifTrue: [ iastModel add: result ]
-		ifFalse: [
-			result ifNotNil: [
-				errorHandler error: (Error new messageText: 'Syntax error: ' , result printString) ] ].
+		ifFalse: [ result ifNotNil: [ self recordError: 'Syntax error: ' , result printString ] ].
 	errorHandler leaveContext.
 	^ result
-
 ]
 
 { #category : 'run' }
@@ -240,12 +274,14 @@ F77Importer >> parseIncludedFiles [
 	parsed := Set new.
 	(iastModel flatCollect: [ :programFile | self includedNamesIn: programFile ]) asSet do: [ :name |
 		(self includedFileNamed: name)
-			ifNil: [ errorHandler enterContext: name. errorHandler error: (Error new messageText: 'included file not found: ' , name). errorHandler leaveContext ]
+			ifNil: [
+				errorHandler enterContext: name.
+				self recordError: 'included file not found: ' , name.
+				errorHandler leaveContext ]
 			ifNotNil: [ :file |
 				(parsed includes: file fullName) ifFalse: [
 					parsed add: file fullName.
 					self parse: file startingAt: #includeFile ] ] ]
-
 ]
 
 { #category : 'run' }
@@ -282,6 +318,13 @@ F77Importer >> prepareForFamix: aProgramFile [
 
 ]
 
+{ #category : 'private' }
+F77Importer >> recordError: aString [
+	"signal a real Error, so that the errorHandler can record it, or pass it when it must stop on errors"
+
+	[ Error signal: aString ] on: Error do: [ :error | errorHandler error: error ]
+]
+
 { #category : 'accessing' }
 F77Importer >> sourceFolder [
 	^ srcFolder
@@ -294,6 +337,11 @@ F77Importer >> sourceFolder: folder [
 
 	srcFolder := folder asFileReference
 
+]
+
+{ #category : 'accessing' }
+F77Importer >> stopOnError [
+	^ errorHandler stop
 ]
 
 { #category : 'error' }
